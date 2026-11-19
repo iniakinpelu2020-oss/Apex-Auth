@@ -1,39 +1,76 @@
 # Apex Auth
 
-One sign-in for the whole suite, on Firebase Auth. Email and Google, no card, no SMS bill.
+One sign-in for the whole suite: a real sign-in screen, token refresh, and one shared way
+for every Apex app to store and send the token.
 
-**Status: the verification half exists; the rest is not built.**
+**Status: built as a shared web module plus a working sign-in page.** The Android token
+paste is still on the list.
 
-## What already exists
+## What is here
 
-`Automation/src/vault/auth.ts` already validates a Firebase ID token inside a Cloudflare
-Worker — it checks the signature against Google's keys, the audience, and the expiry, then
-returns the user's `uid`. That is the hard part, and it is written and used by every
-`/api/drive/*` and `/api/vault/*` route.
+| File | What it is |
+| --- | --- |
+| `js/apex-auth.js` | The shared module. Firebase Auth over REST: sign up, sign in, refresh, sign out, session persistence, change listener. No SDK, no build step. |
+| `index.html` | The sign-in page, and a live view of your session: uid, project, token countdown, manual refresh. |
+| `sw.js`, `manifest.webmanifest` | Installable offline shell. |
 
-## What is missing
+The Worker half already existed: `Automation/src/vault/auth.ts` verifies the ID token
+against Google's keys, the audience and the expiry, and returns the `uid`.
 
-- A real sign-in screen (the Android app currently wants a token pasted by hand).
-- Token refresh, so a session outlives an hour.
-- One shared way for every app to store and send the token.
+## Use it in another app
 
-## The constraint that shapes it
+```js
+import { createApexAuth } from "./apex-auth.js";
 
-Firebase Auth is **not** single sign-on across separate domains. Each `*.workers.dev` or
-`*.web.app` origin keeps its own session. You get the same account everywhere, not one
-login that follows you. The only way around that is putting every app under one parent
-domain you own (for example `vault.apex.example` and `notes.apex.example`) so a cookie can
-be shared — which needs a domain, which is the one thing on this list that costs money.
+const auth = createApexAuth({
+  apiKey: "<firebase web api key>",
+  projectId: "apexaiautomation",
+});
 
-## What you need to do
+auth.onChange((session) => { /* show or hide the app */ });
 
-1. Create a Firebase project (Spark plan, no card).
-2. Enable **Email/Password** and **Google** as sign-in providers.
-3. Add your Worker and Hosting origins as authorised domains.
-4. Download `google-services.json` for the Android app.
+await auth.signIn("you@example.com", "password");
+const token = await auth.getIdToken();          // renews itself before it expires
 
-## First three steps
+await fetch("https://automation.iniakinpelu2020.workers.dev/api/vault/items", {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
 
-1. Copy `auth.ts` into this repo as a small shared module so apps stop duplicating it.
-2. Build one sign-in page that the other apps redirect to and come back from.
-3. Add token refresh to the Android app so nothing has to be pasted again.
+`getIdToken()` returns a cached token until it is within 60 seconds of expiry, then
+refreshes with the stored refresh token. If the refresh is rejected the session is cleared
+and the promise rejects, so the app can send the person back to the sign-in screen.
+
+The session lives in `localStorage` under `apex-auth-session`. Pass a different `storageKey`
+if two apps share one origin.
+
+## Run the page
+
+```sh
+python3 -m http.server 8080
+```
+
+## One-time setup in Firebase
+
+1. Project `apexaiautomation` → Authentication → Sign-in method.
+2. Enable **Email/Password** (and **Google** if you want the Google button next).
+3. Authentication → Settings → Authorised domains: add your Worker and Pages hosts.
+4. For Android, download `google-services.json`.
+
+Until step 2 is done, the page reports "Email/password sign-in is switched off in the
+Firebase console." — which is the honest error, not a bug.
+
+## Limits worth knowing
+
+- **Not single sign-on across domains.** Each origin keeps its own session. Same account
+  everywhere, one login per origin. Only a parent domain you own fixes that.
+- **Google sign-in is not on the page yet.** The module covers email/password; Google needs
+  the `signInWithIdp` redirect flow and is the next piece.
+- **No password reset or email verification UI yet.** Both are one REST endpoint each.
+
+## Next steps, in order
+
+1. Google sign-in through `signInWithIdp`, with the same session shape.
+2. Password reset and email verification.
+3. A redirect-based handoff so one app can sign in and send the token back to another.
+4. Token refresh in the Android app, so nothing is pasted by hand.
