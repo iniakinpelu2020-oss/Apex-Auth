@@ -66,7 +66,8 @@ Firebase console." — which is the honest error, not a bug.
   everywhere, one login per origin. Only a parent domain you own fixes that.
 - **Google sign-in is not on the page yet.** The module covers email/password; Google needs
   the `signInWithIdp` redirect flow and is the next piece.
-- **No password reset or email verification UI yet.** Both are one REST endpoint each.
+- **No password reset or email verification UI on this page yet.** The drop-in gate
+  (`apex-login.js`) does have password reset; this page stops at sign-in and sign-out.
 
 ## Next steps, in order
 
@@ -74,3 +75,39 @@ Firebase console." — which is the honest error, not a bug.
 2. Password reset and email verification.
 3. A redirect-based handoff so one app can sign in and send the token back to another.
 4. Token refresh in the Android app, so nothing is pasted by hand.
+
+## The drop-in gate: `apex-login.js`
+
+`js/apex-auth.js` is the module you import. `apex-login.js` is the same sign-in
+as a plain script you can drop into any page with no import map, no module type
+and no build step:
+
+```html
+<script src="./apex-login.js"></script>
+```
+
+It shows a full-screen sign-in until there is a session, then gets out of the
+way. `window.ApexLogin` gives `.session()`, `.token()`, `.signOut()` and
+`.onChange()`. Nothing needs wiring: any element with `data-apex-account`
+shows the signed-in email, and `data-apex-signout` signs out.
+
+Both use the same `localStorage` key (`apex-auth-session`), so a session started
+on this page is already live in every other Apex app on the origin.
+
+The gate is `apex-login.js` at the root of the ApexOS repo, served at
+`/apex-login.js`; ApexOS loads it in `<head>`, and its bundler copies it into
+all 28 app folders and adds the one `<script>` tag to each `index.html`. So the
+whole suite sits behind this sign-in without editing each app's repo.
+
+## What only you can do
+
+In the Firebase console for `apexaiautomation`:
+
+1. **Authentication -> Sign-in method -> Email/Password -> Enable.**
+2. **Authentication -> Settings -> Authorized domains:** add the origin you
+   serve the suite from (for example `apex.pages.dev`).
+3. **Firestore -> Rules:** publish the block in `Apex-Drop/firestore.rules` if
+   you want Drop's rooms to sync.
+
+Until step 1 is done the gate reports that email/password sign-in is switched
+off and offers local-only use for that tab instead of locking you out.
