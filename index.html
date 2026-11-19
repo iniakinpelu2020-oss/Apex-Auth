@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apex Auth</title>
+<meta name="theme-color" content="#0b0d10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  :root{--bg:#0b0d10;--panel:#12161c;--panel2:#171d25;--line:#242c37;--text:#e7edf5;--muted:#8b98a9;--accent:#a78bfa;--danger:#f87171}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:radial-gradient(900px 500px at 20% -10%,#1b1630 0%,var(--bg) 60%);color:var(--text);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 18px}
+  .wrap{width:100%;max-width:440px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+  .brand strong{font-size:17px;letter-spacing:.2px}
+  .brand span{font-size:12.5px;color:var(--muted)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px}
+  h1{font-size:19px;margin:0 0 4px}
+  p.sub{margin:0 0 18px;color:var(--muted);font-size:13.5px}
+  label{display:block;font-size:12px;color:var(--muted);margin:0 0 6px}
+  input{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px 13px;font:inherit;outline:none;margin-bottom:14px}
+  input:focus{border-color:#4c3f7a;box-shadow:0 0 0 3px #a78bfa1f}
+  button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:11px 16px;cursor:pointer;width:100%}
+  button:hover{border-color:#3a4655}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#170f2b;font-weight:650}
+  button.ghost{background:transparent}
+  .row{display:flex;gap:10px;margin-top:2px}
+  .row button{flex:1}
+  #msg{min-height:20px;font-size:13px;margin:12px 0 0;color:var(--muted)}
+  #msg.bad{color:var(--danger)}
+  #msg.ok{color:var(--accent)}
+  .who{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .avatar{width:42px;height:42px;border-radius:50%;background:#241c3d;color:var(--accent);display:grid;place-items:center;font-weight:700}
+  dl{margin:0;display:grid;grid-template-columns:96px 1fr;gap:8px 12px;font-size:13px}
+  dt{color:var(--muted)}
+  dd{margin:0;word-break:break-all;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .meter{height:4px;border-radius:99px;background:var(--panel2);overflow:hidden;margin:16px 0 6px}
+  .meter i{display:block;height:100%;width:100%;background:var(--accent);transition:width .3s linear}
+  .foot{color:var(--muted);font-size:12.5px;text-align:center;margin-top:18px;line-height:1.6}
+  .foot a{color:var(--accent)}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112" fill="#12161c"/><path d="M256 120l136 236H120z" fill="#a78bfa"/><circle cx="256" cy="300" r="34" fill="#0b0d10"/></svg>
+    <div><strong>Apex Auth</strong><br><span>one sign-in for the suite</span></div>
+  </div>
+
+  <section class="card" id="signinView">
+    <h1>Sign in</h1>
+    <p class="sub">Email and password on Firebase. Nothing is stored on a server of ours.</p>
+    <label for="email">Email</label>
+    <input id="email" type="email" autocomplete="email" spellcheck="false" placeholder="you@example.com">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password" placeholder="at least 6 characters">
+    <div class="row">
+      <button class="primary" id="btn-in">Sign in</button>
+      <button class="ghost" id="btn-up">Create account</button>
+    </div>
+    <p id="msg" role="status"></p>
+  </section>
+
+  <section class="card" id="sessionView" hidden>
+    <div class="who">
+      <div class="avatar" id="avatar">A</div>
+      <div>
+        <div id="who-email" style="font-weight:600"></div>
+        <div style="font-size:12.5px;color:var(--muted)">Signed in</div>
+      </div>
+    </div>
+    <dl>
+      <dt>User id</dt><dd id="who-uid"></dd>
+      <dt>Project</dt><dd id="who-project"></dd>
+      <dt>Token</dt><dd id="who-token"></dd>
+    </dl>
+    <div class="meter"><i id="meter"></i></div>
+    <div style="font-size:12px;color:var(--muted)" id="expiry"></div>
+    <div class="row" style="margin-top:16px">
+      <button id="btn-refresh">Refresh token</button>
+      <button class="ghost" id="btn-out">Sign out</button>
+    </div>
+  </section>
+
+  <p class="foot">
+    Using this in an app: import <code>js/apex-auth.js</code>, call
+    <code>createApexAuth()</code>, then send <code>getIdToken()</code> as
+    <code>Authorization: Bearer …</code>.<br>Full notes in <a href="README.md">README.md</a>.
+  </p>
+</div>
+
+<script type="module">
+import { createApexAuth } from "./js/apex-auth.js";
+
+const CFG = { apiKey: "AIzaSyAXSWi7f3tCMF_2cimrjnLo9j8BZb7Ckr0", projectId: "apexaiautomation" };
+const auth = createApexAuth(CFG);
+const $ = (id) => document.getElementById(id);
+
+function say(text, tone) {
+  const el = $("msg");
+  el.textContent = text || "";
+  el.className = tone || "";
+}
+
+async function handle(action) {
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  if (!email || !password) return say("Enter an email and a password.", "bad");
+  say(action === "signup" ? "Creating account…" : "Signing in…");
+  try {
+    if (action === "signup") await auth.signUp(email, password);
+    else await auth.signIn(email, password);
+    say("");
+  } catch (err) {
+    say(err.message, "bad");
+  }
+}
+
+$("btn-in").onclick = () => handle("signin");
+$("btn-up").onclick = () => handle("signup");
+$("password").addEventListener("keydown", (e) => { if (e.key === "Enter") handle("signin"); });
+$("btn-out").onclick = () => auth.signOut();
+$("btn-refresh").onclick = async () => {
+  try {
+    await auth.refresh();
+    await paint();
+    say("Token refreshed.", "ok");
+  } catch (err) {
+    say(err.message, "bad");
+  }
+};
+
+let ticker = null;
+
+async function paint() {
+  const session = auth.getSession();
+  $("signinView").hidden = Boolean(session);
+  $("sessionView").hidden = !session;
+  clearInterval(ticker);
+  if (!session) return;
+
+  $("who-email").textContent = session.email || "Signed in";
+  $("avatar").textContent = (session.email || "A")[0].toUpperCase();
+  $("who-uid").textContent = session.uid;
+  $("who-project").textContent = auth.projectId;
+
+  const render = () => {
+    const left = Math.max(0, session.expiresAt - Date.now());
+    const mins = Math.floor(left / 60000);
+    const secs = Math.floor((left % 60000) / 1000);
+    $("who-token").textContent = session.idToken.slice(0, 18) + "…";
+    $("expiry").textContent = left > 0
+      ? `Token expires in ${mins}m ${String(secs).padStart(2, "0")}s — getIdToken() renews it for you.`
+      : "Token expired. Call getIdToken() to renew.";
+    $("meter").style.width = Math.max(0, Math.min(100, (left / 3_600_000) * 100)) + "%";
+  };
+  render();
+  ticker = setInterval(render, 1000);
+}
+
+auth.onChange(paint);
+if (auth.isSignedIn()) {
+  auth.getIdToken().catch(() => {});
+}
+</script>
+</body>
+</html>
